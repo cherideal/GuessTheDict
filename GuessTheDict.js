@@ -4,10 +4,13 @@ var DepositeContent = function (text) {
     if (text) {
         var o = JSON.parse(text);
         this.balance = new BigNumber(o.balance);
-        this.point = new BigNumber(o.point);
+        this.point = Number.parseInt(o.point);
+        if (Number.isNaN(this.point)){
+            this.point = 0;
+        }
     } else {
         this.balance = new BigNumber(0);
-        this.point = new BigNumber(0);
+        this.point = 0;
     }
 };
 
@@ -17,7 +20,7 @@ DepositeContent.prototype = {
     }
 };
 
-var BankVaultContract = function () {
+var GuessTheDictContract = function () {
     LocalContractStorage.defineMapProperty(this, "dataMap", {
         parse: function (text) {
             return new DepositeContent(text);
@@ -31,7 +34,7 @@ var BankVaultContract = function () {
 };
 
 // save value to contract, only after height of block, users can takeout
-BankVaultContract.prototype = {
+GuessTheDictContract.prototype = {
     init: function () {
         this.owner = Blockchain.transaction.from;
         this.size = 0;
@@ -77,28 +80,65 @@ BankVaultContract.prototype = {
         this.size=0;
     },
 
-    action: function () {
+    action: function (point) {
         if (!this.state) {
             throw new Error("The game is stop already");
         }
+
+        if (!Number.IsInteger(point)){
+            throw new Error("Invalid input value");
+        }
+
+        point = Number.parseInt(point);
+        if (0 == point || Number.isNaN(point)){
+            point = 6;
+        }
+        else{
+            point = point % 6;
+        }
+
         var from = Blockchain.transaction.from;
         var value = Blockchain.transaction.value;
 
-        var orig_deposit = this.bankVault.get(from);
+        var index = this.size;
+        var orig_deposit = this.dataMap.get(from);
         if (orig_deposit) {
             value = value.plus(orig_deposit.balance);
+        }
+        else{
+            this.arrayMap.set(index, from);
+            this.size += 1;
         }
 
         var deposit = new DepositeContent();
         deposit.balance = value;
+        deposit.point = point;
 
-        this.bankVault.put(from, deposit);
+        this.dataMap.put(from, deposit);
+    },
+
+    _genPoint: function () {
+        var buffer = new Uint32Array(1);
+        crypto.getRandomValues(buffer);
+        return buffer ? (buffer % 6) : 6;
     },
 
     _assign: function () {
-        var from = Blockchain.transaction.from;
-        var bk_height = new BigNumber(Blockchain.block.height);
-        var amount = new BigNumber(value);
+        var point = _genPoint();
+        var amount = new BigNumber(0);
+        var accounts = [7];
+        for (var i = 0; i < this.size; i++){
+            var key = this.arrayMap.get(i);
+            var deposit = dataMap.get(key);
+            accounts[deposit.point].key = key;
+            accounts[deposit.point].amount = accounts[deposit.point].amount.plus(deposit.balance);
+        }
+
+        var winers = accounts[point];
+
+        for (var i = 0; i < this.size; i++){
+
+        }
 
         var deposit = this.bankVault.get(from);
         if (!deposit) {
@@ -130,7 +170,7 @@ BankVaultContract.prototype = {
     },
     balanceOf: function () {
         var from = Blockchain.transaction.from;
-        return this.bankVault.get(from);
+        return this.dataMap.get(from);
     },
     verifyAddress: function (address) {
         // 1-valid, 0-invalid
@@ -140,4 +180,4 @@ BankVaultContract.prototype = {
         };
     }
 };
-module.exports = BankVaultContract;
+module.exports = GuessTheDictContract;
