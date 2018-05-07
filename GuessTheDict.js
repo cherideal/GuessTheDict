@@ -12,6 +12,8 @@ var DepositeContent = function (text) {
         this.balance = new BigNumber(0);
         this.point = 0;
     }
+
+    this.bonus = this.balance;
 };
 
 DepositeContent.prototype = {
@@ -59,15 +61,15 @@ GuessTheDictContract.prototype = {
 
         this.state = false;
         console.log("Start to assign the award now!");
-        _assign();
-        _clear();
+        this._assign();
+        this._clear();
     },
 
     _stop: function() {
         this.state = false;
         console.log("Start to assign the award now!");
-        _assign();
-        _clear();
+        this._assign();
+        this._clear();
     },
 
     _clear: function() {
@@ -113,6 +115,7 @@ GuessTheDictContract.prototype = {
         var deposit = new DepositeContent();
         deposit.balance = value;
         deposit.point = point;
+        deposit.bonus = value;
 
         this.dataMap.put(from, deposit);
     },
@@ -124,54 +127,94 @@ GuessTheDictContract.prototype = {
     },
 
     _assign: function () {
-        var point = _genPoint();
+        var point = this._genPoint();
         var amount = new BigNumber(0);
         var accounts = [7];
+        for (var i = 0; i < 7; i++){
+            accounts[i].amount = new BigNumber(0);
+            accounts[i].keys = [];
+        }
+
         for (var i = 0; i < this.size; i++){
             var key = this.arrayMap.get(i);
-            var deposit = dataMap.get(key);
-            accounts[deposit.point].key = key;
+            var deposit = this.dataMap.get(key);
+            accounts[deposit.point].keys.append(key);
             accounts[deposit.point].amount = accounts[deposit.point].amount.plus(deposit.balance);
         }
 
-        var winers = accounts[point];
+        var winer = accounts[point];
+
+        for (var i = 1; i < 7; i++){
+            if (i == point){
+                continue;
+            }
+
+            for (var j = 0; j < accounts[i].keys.length; j++){
+                var deposit = this.dataMap.get(key);
+                if (winer.amount >= accounts[i].amount){
+                    deposit.bonus = new BigNumber(0);
+                }
+                else{
+                    deposit.bonus = (accounts[i].amount - winer.amount) * (deposit.balance/accounts[i].amount)
+                }
+
+                this.dataMap.set(key, deposit);
+            }
+        }
+
+        var rewards = new BigNumber(0);
+        for (var i = 0; i < this.size; i++){
+            var key = this.arrayMap.get(i);
+            var deposit = this.dataMap.get(key);
+            //winer's balance == bonus
+            rewards = rewards.plus(deposit.balance - deposit.bonus);
+        }
+
+        var charges = rewards / 20;
+        rewards = rewards - charges;
+        for (var i = 0; i < winer.keys.length; i++){
+            key = winer.keys[i];
+            var deposit = this.dataMap.get(key);
+            deposit.bonus = deposit.bonus + deposit.balance/winer.amount*rewards;
+            this.dataMap.set(key, deposit);
+        }
 
         for (var i = 0; i < this.size; i++){
+            var key = this.arrayMap.get(i);
+            var deposit = this.dataMap.get(key);
+            var bonus = deposit.bonus;
+            var result = Blockchain.transfer(key, bonus);
+            if (!result) {
+                throw new Error("transfer failed.");
+            }
 
+            Event.Trigger("BankVault", {
+                Transfer: {
+                    from: Blockchain.transaction.to,
+                    to: key,
+                    value: bonus.toString()
+                }
+            });
         }
 
-        var deposit = this.bankVault.get(from);
-        if (!deposit) {
-            throw new Error("No deposit before.");
-        }
-
-        if (bk_height.lt(deposit.expiryHeight)) {
-            throw new Error("Can not takeout before expiryHeight.");
-        }
-
-        if (amount.gt(deposit.balance)) {
-            throw new Error("Insufficient balance.");
-        }
-
-        var result = Blockchain.transfer(from, amount);
+        var result = Blockchain.transfer(this.owner, charges);
         if (!result) {
             throw new Error("transfer failed.");
         }
         Event.Trigger("BankVault", {
             Transfer: {
                 from: Blockchain.transaction.to,
-                to: from,
-                value: amount.toString()
+                to: this.owner,
+                value: charges.toString()
             }
         });
-
-        deposit.balance = deposit.balance.sub(amount);
-        this.bankVault.put(from, deposit);
     },
+
     balanceOf: function () {
         var from = Blockchain.transaction.from;
         return this.dataMap.get(from);
     },
+
     verifyAddress: function (address) {
         // 1-valid, 0-invalid
         var result = Blockchain.verifyAddress(address);
