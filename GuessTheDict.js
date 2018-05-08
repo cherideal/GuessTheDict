@@ -70,7 +70,19 @@ GuessTheDictContract.prototype = {
         this.actorNumber = 0;
     },
 
-    _save: function (address, value) {
+    _save2bank: function (address, value) {
+        var orig_deposit = this.bankVault.get(address);
+        if (orig_deposit) {
+            value = value.plus(orig_deposit.balance);
+        }
+
+        var deposit = new DepositeContent();
+        deposit.balance = value;
+
+        this.bankVault.put(address, deposit);
+    },
+
+    _save2dict: function (address, value) {
         var orig_deposit = this.bankVault.get(address);
         if (orig_deposit) {
             value = value.plus(orig_deposit.balance);
@@ -85,7 +97,7 @@ GuessTheDictContract.prototype = {
     save: function () {
         var from = Blockchain.transaction.from;
         var value = Blockchain.transaction.value;
-        this._save(from, value);
+        this._save2bank(from, value);
     },
 
     takeout: function (value) {
@@ -206,7 +218,7 @@ GuessTheDictContract.prototype = {
             point = point.abs().mod(6);
         }
 
-
+        
 
         var index = this.size;
         var orig_info = this.dataMap.get(from);
