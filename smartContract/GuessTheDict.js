@@ -41,6 +41,19 @@ DepositeContent.prototype = {
     }
 };
 
+var GameStatus = function (status, publisher, size, actorNumber) {
+    this.status = status;
+    this.publisher = publisher;
+    this.size = size;
+    this.actors = actorNumber;
+};
+
+GameStatus.prototype = {
+    toString: function () {
+        return JSON.stringify(this);
+    }
+};
+
 var GuessTheDictContract = function () {
     LocalContractStorage.defineMapProperty(this, "bankVault", {
         parse: function (text) {
@@ -68,6 +81,8 @@ GuessTheDictContract.prototype = {
         this.owner = Blockchain.transaction.from;
         this.size = 0;
         this.actorNumber = 0;
+        this.publisher = this.owner;
+        this.status = false;
     },
 
     _save2bank: function (address, value) {
@@ -102,7 +117,7 @@ GuessTheDictContract.prototype = {
     },
 
     _stop: function () {
-        this.state = false;
+        this.status = false;
         console.log("Start to assign the award now!");
         this._assign();
         this._clear();
@@ -134,8 +149,7 @@ GuessTheDictContract.prototype = {
         return point ? (point.integerValue() % 6) : 6;
     },
 
-    _assign: function () {
-        var point = this._genPoint();
+    _getAllDict: function(){
         var accounts = [7];
         for (var i = 0; i < 7; i++) {
             accounts[i].amount = new BigNumber(0);
@@ -148,6 +162,13 @@ GuessTheDictContract.prototype = {
             accounts[dict.point].keys.append(key);
             accounts[dict.point].amount = accounts[dict.point].amount.plus(dict.balance);
         }
+
+        return accounts;
+    },
+
+    _assign: function () {
+        var point = this._genPoint();
+        var accounts = this._getAccount();
 
         var winer = accounts[point];
         for (var i = 1; i < 7; i++) {
@@ -235,7 +256,7 @@ GuessTheDictContract.prototype = {
     },
 
     start: function (actorNumber) {
-        if (this.state) {
+        if (this.status) {
             throw new Error("The game is started already");
         }
 
@@ -249,24 +270,24 @@ GuessTheDictContract.prototype = {
         }
 
         this.publisher = Blockchain.transaction.from;
-        this.state = true;
+        this.status = true;
 
         console.log("Please start to guess the dict now!")
     },
 
     stop: function () {
-        if (!this.state) {
+        if (!this.status) {
             throw new Error("The game is stop already");
         }
 
-        this.state = false;
+        this.status = false;
         console.log("Start to assign the award now!");
         this._assign();
         this._clear();
     },
 
     action: function (point, funds) {
-        if (!this.state) {
+        if (!this.status) {
             throw new Error("The game is stop already");
         }
 
@@ -303,7 +324,10 @@ GuessTheDictContract.prototype = {
 
     balanceOf: function () {
         var from = Blockchain.transaction.from;
-        return this.dataMap.get(from);
+        var result = this.dataMap.get(from);
+        return {
+            balance: result ? result : 0
+        };
     },
 
     verifyAddress: function (address) {
@@ -312,6 +336,16 @@ GuessTheDictContract.prototype = {
         return {
             valid: result == 0 ? false : true
         };
+    },
+
+    listDict: function () {
+        return this._getAllDict();
+    },
+
+    showDicts: function () {
+        return new GameStatus(this.status, this.publisher, this.size, this.actorNumber);
     }
+
 };
+
 module.exports = GuessTheDictContract;

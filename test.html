@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="viewport"
+          content="width=device-width,initial-scale=0.5, maximum-scale=0.5, minimum-scale=0.5, user-scalable=no">
+    <meta name="x5-fullscreen" content="true">
+    <meta name="full-screen" content="yes">
+
+    <title>Guess the Dict</title>
+    <link rel="stylesheet" href="lib/bootstrap-4.0.0-dist/css/bootstrap.min.css">
+    <style>
+        .logo {
+            width: 60%;
+            height: 500px;
+            margin: auto;
+        }
+
+        .name {
+            text-align: center;
+            font-size: 66px;
+            text-shadow: 3px 5px grey, 1px 1px #333;
+        }
+
+        .img {
+            width: 48%;
+            height: 53%;
+            margin: auto;
+            margin-top: 38px;
+        }
+
+        .img img {
+            width: 100%;
+            height: 100%;
+        }
+
+        .balance {
+            width: 80%;
+            height: 100px;
+            margin: auto;
+        }
+
+        .noExtension {
+            width: 60%;
+            height: 100px;
+            margin: auto;
+            font-size: 23px;
+        }
+
+        #search_value {
+            width: 80%;
+            height: 50px;
+            box-shadow: 3px 5px grey, 1px 1px #333;
+        }
+
+        .balance button {
+            width: 18%;
+            height: 50px;
+            margin-left: 6px;
+            box-shadow: 3px 5px grey, 1px 1px #333;
+        }
+
+        .result_success {
+            width: 60%;
+            margin: auto;
+            font-size: 22px
+        }
+
+        .result_faile {
+            width: 60%;
+            margin: auto;
+            font-size: 22px
+        }
+
+        .add_banner {
+            width: 90%;
+            margin: auto;
+        }
+
+        .add_banner input {
+            width: 80%;
+            height: 50px;
+            box-shadow: 3px 5px grey, 1px 1px #333;
+        }
+
+        .add_banner button {
+            width: 18%;
+            height: 50px;
+            margin-left: 6px;
+            box-shadow: 3px 5px grey, 1px 1px #333;
+        }
+
+        p {
+            text-indent: 2em;
+            font-size: 30px;
+        }
+
+        .hide {
+            display: none;
+        }
+
+        .contenner {
+            background: url("img/bg.jpg");
+            height: 1500px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="contenner">
+    <div class="logo">
+        <div class="name">GUESS THE DICT</div>
+        <div class="img logo_rotate">
+            <img src="img/logo.png" alt="">
+        </div>
+    </div>
+    <div class="noExtension hide" id="noExtension">
+        NOTE: Please install <a target="_blank" href="https://github.com/ChengOrangeJu/WebExtensionWallet">WebExtensionWallet</a>
+        to use GUESS THE DICT
+    </div>
+    <div class=".balance">
+        <input id="balance_address" type="text">
+        <button id="balance">balance</button>
+    </div>
+	
+	<div class=".balance">
+        <button id="contract_status">status</button>
+    </div>
+
+    <div class="result_success hide">
+        <div id="search_banner"></div>
+        <p id="search_result"> wait for content </p>
+    </div>
+
+    <div class="result_faile hide">
+        Failed to find related information. Do you want to
+        <button id="add">add</button>
+        infromation for "<i id="result_faile_add">asd</i>"?
+    </div>
+
+    <div class="add_banner hide">
+        <input type="text" id="add_value" placeholder="input contents for your keyword">
+        <button id="push">submit</button>
+    </div>
+</div>
+<script src="lib/jquery-3.3.1.min.js"></script>
+<script src="lib/nebPay.js"></script>
+<script src="lib/bootstrap-4.0.0-dist/js/bootstrap.min.js"></script>
+<script src="lib/nebulas.js"></script>
+<script>
+
+    "use strict";
+
+    var dappAddress = "n1kREEefxJsEAANtiLSGaKyFdzZGCSTdZtd";
+    var nebulas = require("nebulas");
+    var Account = nebulas.Account;
+    var neb = new nebulas.Neb();
+    console.log("dappAddress:" + dappAddress);
+    neb.setRequest(new nebulas.HttpRequest("https://testnet.nebulas.io"));
+    console.log("request" + neb.toString());
+
+    // 搜索功能: 查看帐户余额
+    $("#balance").click(function () {
+        var from = $("#balance_address").val();
+        console.log("from:" + from);
+
+        var value = "0";
+        var nonce = "0"
+        var gas_price = "1000000"
+        var gas_limit = "2000000"
+        var callFunction = "balanceOf"
+        var callArgs = "[]"
+        var contract = {
+            "function": callFunction,
+            "args": callArgs
+        }
+
+        neb.api.call(from, dappAddress, value, nonce, gas_price, gas_limit, contract).then(function (resp) {
+            cbSearch(resp)
+        }).catch(function (err) {
+            console.log("error:" + err.message)
+        })
+		
+		$(".result_success").removeClass("hide");
+    })
+
+    //return of search,
+    function cbSearch(resp) {
+        var result = resp.result    ////resp is an object, resp.result is a JSON string
+        console.log("return of rpc call: " + JSON.stringify(result))
+
+        if (result === 'null') {
+            $(".add_banner").addClass("hide");
+            $(".result_success").addClass("hide");
+
+            $("#result_faile_add").text($("#search_value").val())
+
+            $(".result_faile").removeClass("hide");
+        }
+        else {
+            //if result is not null, then it should be "return value" or "error message"
+            try {
+                result = JSON.parse(result);
+                console.log("return of rpc call: " + result.balance);
+            } catch (err) {
+                $("#search_result").text("error: "+err)
+            }
+			
+			if ("balance" in result){      //"return value"
+                $(".add_banner").addClass("hide");
+				$(".result_faile").addClass("hide");
+
+				$("#search_banner").text($("#search_value").val());
+				$("#search_result").text("balance: "+result.balance);
+
+				$(".result_success").removeClass("hide");
+            } else {        //"error message"
+                $(".add_banner").addClass("hide");
+                $(".result_faile").addClass("hide");
+
+                $("#search_banner").text($("#search_value").val())
+                $("#search_result").text("error: "+result)
+
+                $(".result_success").removeClass("hide");
+            }
+        }
+
+    }
+	
+	// 搜索功能: 查看合约状态
+    $("#contract_status").click(function () {
+        var from = $("#balance_address").val();
+        console.log("from:" + from);
+
+        var value = "0";
+        var nonce = "0"
+        var gas_price = "1000000"
+        var gas_limit = "2000000"
+        var callFunction = "showDicts"
+        var callArgs = "[]"
+        var contract = {
+            "function": callFunction,
+            "args": callArgs
+        }
+
+        neb.api.call(from, dappAddress, value, nonce, gas_price, gas_limit, contract).then(function (resp) {
+            csSearch(resp)
+        }).catch(function (err) {
+            console.log("error:" + err.message)
+        })
+		
+		$(".result_success").removeClass("hide");
+    })
+	
+	//return of search,
+    function csSearch(resp) {
+        var result = resp.result    ////resp is an object, resp.result is a JSON string
+        console.log("return of rpc call: " + JSON.stringify(result))
+
+        if (result === 'null') {
+            $(".add_banner").addClass("hide");
+            $(".result_success").addClass("hide");
+
+            $("#result_faile_add").text($("#search_value").val())
+
+            $(".result_faile").removeClass("hide");
+        }
+        else {
+            //if result is not null, then it should be "return value" or "error message"
+            try {
+                result = JSON.parse(result);
+                console.log("return of rpc call: " + result.status);
+            } catch (err) {
+                $("#search_result").text("error: "+err)
+            }
+			
+			if ("status" in result){      //"return value"
+                $(".add_banner").addClass("hide");
+				$(".result_faile").addClass("hide");
+
+				$("#search_banner").text($("#search_value").val());
+				$("#search_result").text("status: "+result.status+",size:"+result.size+",actors:"+result.actors+",publisher:"+result.publisher);
+
+				$(".result_success").removeClass("hide");
+            } else {        //"error message"
+                $(".add_banner").addClass("hide");
+                $(".result_faile").addClass("hide");
+
+                $("#search_banner").text($("#search_value").val())
+                $("#search_result").text("error: "+result)
+
+                $(".result_success").removeClass("hide");
+            }
+        }
+
+    }
+
+    // 添加信息功能: 像super-dictionary 中添加词条
+    $("#add").click(function () {
+        $(".result_faile").addClass("hide");
+        $(".add_banner").removeClass("hide");
+
+        $("#add_value").val("")
+    })
+
+    var NebPay = require("nebpay");     //https://github.com/nebulasio/nebPay
+    var nebPay = new NebPay();
+    var serialNumber
+
+    $("#push").click(function () {
+
+        var to = dappAddress;
+        var value = "0";
+        var callFunction = "save"
+        var callArgs = "[\"" + $("#search_value").val() + "\",\"" + $("#add_value").val() + "\"]"
+
+        serialNumber = nebPay.call(to, value, callFunction, callArgs, {    //使用nebpay的call接口去调用合约,
+            listener: cbPush        //设置listener, 处理交易返回信息
+        });
+
+        intervalQuery = setInterval(function () {
+            funcIntervalQuery();
+        }, 5000);
+    });
+
+    var intervalQuery
+
+    function funcIntervalQuery() {
+        nebPay.queryPayInfo(serialNumber)   //search transaction result from server (result upload to server by app)
+            .then(function (resp) {
+                console.log("tx result: " + resp)   //resp is a JSON string
+                var respObject = JSON.parse(resp)
+                if (respObject.code === 0) {
+                    alert(`set ${$("#search_value").val()} succeed!`)
+                    clearInterval(intervalQuery)
+                }
+            })
+            .catch(function (err) {
+                console.log(err);
+            });
+    }
+
+    function cbPush(resp) {
+        console.log("response of push: " + JSON.stringify(resp))
+    }
+
+</script>
+</body>
+
+</html>
