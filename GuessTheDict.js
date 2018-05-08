@@ -4,16 +4,20 @@ var DepositeContent = function (text) {
     if (text) {
         var o = JSON.parse(text);
         this.balance = new BigNumber(o.balance);
-        this.point = Number.parseInt(o.point);
-        if (Number.isNaN(this.point)){
-            this.point = 0;
+        this.point = new BigNumber(o.point);
+        if (this.balance.isNaN()){
+            this.balance = new BigNumber(0);
         }
-    } else {
+        if (this.point.isNaN()){
+            this.point = new BigNumber(0);
+        }
+    }
+    else {
         this.balance = new BigNumber(0);
-        this.point = 0;
+        this.point = new BigNumber(0);
     }
 
-    this.bonus = this.balance;
+    this.bonus = new BigNumber(0);
 };
 
 DepositeContent.prototype = {
@@ -40,14 +44,26 @@ GuessTheDictContract.prototype = {
     init: function () {
         this.owner = Blockchain.transaction.from;
         this.size = 0;
+        this.actorNumber = 0;
     },
 
-    start: function() {
-        if (this.state) {
+    start: function(actorNumber) {
+        if (this.state){
             throw new Error("The game is started already");
         }
+
+        var number = new BigNumber(actorNumber);
+        if (!number.isInteger()){
+            throw new Error("Invalid actor number");
+        }
+        this.actorNumber = number.integerValue();
+        if(this.actorNumber <= 0){
+            this.actorNumber = 2;
+        }
+
         this.publisher = Blockchain.transaction.from;
         this.state = true;
+
         console.log("Please start to guess the dict now!")
     },
 
@@ -55,6 +71,7 @@ GuessTheDictContract.prototype = {
         if (!this.state) {
             throw new Error("The game is stop already");
         }
+
         if (this.publisher != Blockchain.transaction.from) {
             throw new Error("Only publisher can stop the game manually");
         }
@@ -74,6 +91,7 @@ GuessTheDictContract.prototype = {
 
     _clear: function() {
         this.publisher = 0;
+        this.actorNumber = 0;
         for (var i = 0; i < this.size; i++){
             var key = this.arrayMap.get(i);
             this.arrayMap.del(i);
@@ -87,25 +105,25 @@ GuessTheDictContract.prototype = {
             throw new Error("The game is stop already");
         }
 
-        if (!Number.IsInteger(point)){
+        point = new BigNumber(point);
+        if (!point.isInteger() || point.isLessThan(0)){
             throw new Error("Invalid input value");
         }
 
-        point = Number.parseInt(point);
-        if (0 == point || Number.isNaN(point)){
+        if (point.isZero() || point.isNAN()){
             point = 6;
         }
         else{
-            point = point % 6;
+            point = point.absoluteValue().modulo(6);
         }
 
         var from = Blockchain.transaction.from;
         var value = Blockchain.transaction.value;
 
         var index = this.size;
-        var orig_deposit = this.dataMap.get(from);
-        if (orig_deposit) {
-            value = value.plus(orig_deposit.balance);
+        var orig_info = this.dataMap.get(from);
+        if (orig_info) {
+            value = value.plus(orig_info.balance);
         }
         else{
             this.arrayMap.set(index, from);
@@ -118,17 +136,21 @@ GuessTheDictContract.prototype = {
         deposit.bonus = value;
 
         this.dataMap.put(from, deposit);
+
+        if (this.actorNumber >= this.size){
+            this._stop()
+        }
     },
 
     _genPoint: function () {
-        var buffer = new Uint32Array(1);
-        crypto.getRandomValues(buffer);
-        return buffer ? (buffer % 6) : 6;
+        BigNumber.config({ CRYPTO: true })
+        var rand = BigNumber.random();
+        var point = rand.multipliedBy(6).decimalPlaces(0, 1);
+        return point ? (point.integerValue() % 6) : 6;
     },
 
     _assign: function () {
         var point = this._genPoint();
-        var amount = new BigNumber(0);
         var accounts = [7];
         for (var i = 0; i < 7; i++){
             accounts[i].amount = new BigNumber(0);
@@ -143,7 +165,6 @@ GuessTheDictContract.prototype = {
         }
 
         var winer = accounts[point];
-
         for (var i = 1; i < 7; i++){
             if (i == point){
                 continue;
@@ -151,31 +172,32 @@ GuessTheDictContract.prototype = {
 
             for (var j = 0; j < accounts[i].keys.length; j++){
                 var deposit = this.dataMap.get(key);
-                if (winer.amount >= accounts[i].amount){
+                if (winer.amount.isGreaterThanOrEqualTo(accounts[i].amount)){
                     deposit.bonus = new BigNumber(0);
                 }
                 else{
-                    deposit.bonus = (accounts[i].amount - winer.amount) * (deposit.balance/accounts[i].amount)
+                    deposit.bonus = (accounts[i].amount.minus(winer.amount)).
+                                     multipliedBy(deposit.balance.dividedBy(accounts[i].amount));
                 }
 
                 this.dataMap.set(key, deposit);
             }
         }
 
-        var rewards = new BigNumber(0);
+        var rewardsTotal = new BigNumber(0);
         for (var i = 0; i < this.size; i++){
             var key = this.arrayMap.get(i);
             var deposit = this.dataMap.get(key);
             //winer's balance == bonus
-            rewards = rewards.plus(deposit.balance - deposit.bonus);
+            rewardsTotal = rewardsTotal.plus(deposit.balance.minus(deposit.bonus));
         }
 
-        var charges = rewards / 20;
-        rewards = rewards - charges;
+        var charges = rewardsTotal.multipliedBy(0.05);
+        var rewards = rewardsTotal.minus(charges);
         for (var i = 0; i < winer.keys.length; i++){
             key = winer.keys[i];
             var deposit = this.dataMap.get(key);
-            deposit.bonus = deposit.bonus + deposit.balance/winer.amount*rewards;
+            deposit.bonus = deposit.bonus.plus(deposit.balance.dividedBy(winer.amount).multipliedBy(rewards));
             this.dataMap.set(key, deposit);
         }
 
@@ -183,12 +205,16 @@ GuessTheDictContract.prototype = {
             var key = this.arrayMap.get(i);
             var deposit = this.dataMap.get(key);
             var bonus = deposit.bonus;
+            if (bonus.isZero()){
+                continue;
+            }
+
             var result = Blockchain.transfer(key, bonus);
             if (!result) {
                 throw new Error("transfer failed.");
             }
 
-            Event.Trigger("BankVault", {
+            Event.Trigger("RewardDistribute", {
                 Transfer: {
                     from: Blockchain.transaction.to,
                     to: key,
@@ -201,7 +227,7 @@ GuessTheDictContract.prototype = {
         if (!result) {
             throw new Error("transfer failed.");
         }
-        Event.Trigger("BankVault", {
+        Event.Trigger("CommissionDistribute", {
             Transfer: {
                 from: Blockchain.transaction.to,
                 to: this.owner,
